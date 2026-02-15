@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cache Cleaner</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="app-switcher">
+        <a class="app-switch-btn" id="link-backup" href="#">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Backup Grabber
+        </a>
+        <a class="app-switch-btn active" href="#">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          Cache Cleaner
+        </a>
+      </div>
+      <div class="logo">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        <span>Cache Cleaner</span>
+      </div>
+      <nav>
+        <button class="nav-btn active" data-tab="hosts">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+          Hosts
+        </button>
+        <button class="nav-btn" data-tab="history">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          History
+        </button>
+      </nav>
+    </aside>
+
+    <main>
+      <!-- Hosts -->
+      <section id="hosts" class="page active">
+        <div class="page-header">
+          <h1>Remote Hosts</h1>
+          <button class="btn btn-primary" onclick="showHostForm()">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Host
+          </button>
+        </div>
+        <div id="host-list" class="card-grid"></div>
+      </section>
+
+      <!-- History -->
+      <section id="history" class="page">
+        <div class="page-header">
+          <h1>Clear History</h1>
+          <button class="btn" onclick="loadHistory()">Refresh</button>
+        </div>
+        <div id="history-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Host dialog -->
+  <dialog id="host-dialog">
+    <form id="host-form" onsubmit="saveHost(event)">
+      <div class="dialog-header">
+        <h2 id="host-form-title">Add Host</h2>
+        <button type="button" class="close-btn" onclick="document.getElementById('host-dialog').close()">&times;</button>
+      </div>
+      <input type="hidden" id="host-id">
+      <div class="field">
+        <label for="host-name">Name</label>
+        <input type="text" id="host-name" required placeholder="e.g. web-server-1">
+      </div>
+      <div class="field-row">
+        <div class="field grow">
+          <label for="host-hostname">Hostname / IP</label>
+          <input type="text" id="host-hostname" required placeholder="192.168.1.10">
+        </div>
+        <div class="field narrow">
+          <label for="host-port">Port</label>
+          <input type="number" id="host-port" value="22" min="1" max="65535">
+        </div>
+      </div>
+      <div class="field">
+        <label for="host-username">Username</label>
+        <input type="text" id="host-username" required placeholder="root">
+      </div>
+      <div class="field">
+        <label for="host-ssh-key">SSH Key Path <span class="hint">inside the container</span></label>
+        <input type="text" id="host-ssh-key" placeholder="/root/.ssh/id_ed25519">
+      </div>
+      <div class="field">
+        <label for="host-paths">Cache Paths <span class="hint">one per line — will run find+rm on each</span></label>
+        <textarea id="host-paths" rows="3" required placeholder="/var/cache/nginx/&#10;/tmp/app-cache/"></textarea>
+      </div>
+      <div class="field">
+        <label for="host-schedule-preset">Auto-clear Schedule</label>
+        <select id="host-schedule-preset" onchange="onScheduleChange()">
+          <option value="">Manual only</option>
+          <option value="0 * * * *">Every hour</option>
+          <option value="0 */6 * * *">Every 6 hours</option>
+          <option value="0 0 * * *">Daily at midnight</option>
+          <option value="0 2 * * *">Daily at 2:00 AM</option>
+          <option value="0 3 * * 1">Weekly (Mon 3 AM)</option>
+          <option value="0 4 1 * *">Monthly (1st at 4 AM)</option>
+          <option value="custom">Custom cron...</option>
+        </select>
+      </div>
+      <div class="field" id="custom-cron-field" style="display:none">
+        <label for="host-schedule-custom">Custom Cron Expression</label>
+        <input type="text" id="host-schedule-custom" placeholder="min hour day month weekday">
+        <span class="hint">e.g. 30 1 * * * = daily at 1:30 AM</span>
+      </div>
+      <div class="field">
+        <label for="host-keep-last">History Retention <span class="hint">how many runs to keep</span></label>
+        <select id="host-keep-last">
+          <option value="0">Keep all</option>
+          <option value="10">Last 10</option>
+          <option value="25">Last 25</option>
+          <option value="50">Last 50</option>
+          <option value="100">Last 100</option>
+        </select>
+      </div>
+      <div class="dialog-footer">
+        <button type="button" class="btn" onclick="document.getElementById('host-dialog').close()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast-container"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

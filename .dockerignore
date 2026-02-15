@@ -1,0 +1,8 @@
+ssh/
+*.db
+*.sqlite
+__pycache__/
+*.pyc
+.git/
+.gitignore
+README.md

@@ -1,0 +1,12 @@
+services:
+  cache-cleaner:
+    build: .
+    ports:
+      - "5001:5001"
+    volumes:
+      - app-db:/data
+      - ./ssh:/root/.ssh:ro
+    restart: unless-stopped
+
+volumes:
+  app-db:
