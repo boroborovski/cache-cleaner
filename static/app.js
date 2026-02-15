@@ -1,8 +1,3 @@
-// ── App switcher ─────────────────────────────────────────────────────
-// Link to backup-grabber on port 5000 of the same host
-document.getElementById("link-backup").href =
-  window.location.protocol + "//" + window.location.hostname + ":5000";
-
 // ── Tab switching ────────────────────────────────────────────────────
 document.querySelectorAll(".nav-btn").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -164,6 +159,52 @@ async function loadHosts() {
   }
 }
 
+function hostCardHtml(h) {
+  const paths = JSON.parse(h.remote_paths);
+  const isRunning = h.last_status === "running";
+  let lastBadge = "";
+  if (isRunning) {
+    lastBadge = `<span class="last-run-info" data-running-hostid="${h.id}">
+      <span class="status status-running"><span class="spinner-inline"></span> running</span>
+    </span>`;
+  } else if (h.last_status) {
+    const rel = formatRelative(h.last_run);
+    const count = h.last_files_deleted ?? 0;
+    lastBadge = `<span class="last-run-info">
+      <span class="status status-${h.last_status}">${h.last_status}</span>
+      ${rel ? `<span class="last-run-time">${rel}</span>` : ""}
+      ${h.last_status === "success" ? `<span class="last-run-time">${count} file${count !== 1 ? "s" : ""}</span>` : ""}
+    </span>`;
+  } else {
+    lastBadge = `<span class="last-run-info"><span class="never-run">Never cleared</span></span>`;
+  }
+  return `
+  <div class="host-card${isRunning ? " host-card-running" : ""}">
+    <div class="host-card-top">
+      <div class="host-card-title">
+        <h3>${esc(h.name)}</h3>
+        ${lastBadge}
+      </div>
+      <div class="host-card-actions">
+        <button class="btn btn-primary btn-sm" onclick="triggerClear(event, '${h.id}')"${isRunning ? " disabled" : ""}>
+          ${isRunning ? '<span class="spinner-inline"></span> Running…' : "Clear Now"}
+        </button>
+        <button class="btn btn-sm btn-test" onclick="testConnection('${h.id}', this)">Test SSH</button>
+        <button class="btn btn-sm" onclick="editHost('${h.id}')">Edit</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteHost('${h.id}')">Delete</button>
+      </div>
+    </div>
+    <div class="host-meta">
+      <span>${esc(h.username)}@${esc(h.hostname)}:${h.port}</span>
+      <span>${scheduleLabel(h.schedule)}</span>
+      <span>Keep: ${h.keep_last ? "last " + h.keep_last : "all"}</span>
+    </div>
+    <div class="tag-paths">
+      ${paths.map(p => `<span class="tag">${esc(p)}</span>`).join("")}
+    </div>
+  </div>`;
+}
+
 function renderHosts() {
   const el = document.getElementById("host-list");
   if (!hostsCache.length) {
@@ -177,53 +218,38 @@ function renderHosts() {
       </div>`;
     return;
   }
-  el.innerHTML = hostsCache.map(h => {
-    const paths     = JSON.parse(h.remote_paths);
-    const isRunning = h.last_status === "running";
 
-    let lastBadge = "";
-    if (isRunning) {
-      lastBadge = `<span class="last-run-info" data-running-hostid="${h.id}">
-        <span class="status status-running"><span class="spinner-inline"></span> running</span>
-      </span>`;
-    } else if (h.last_status) {
-      const rel = formatRelative(h.last_run);
-      const count = h.last_files_deleted ?? 0;
-      lastBadge = `<span class="last-run-info">
-        <span class="status status-${h.last_status}">${h.last_status}</span>
-        ${rel ? `<span class="last-run-time">${rel}</span>` : ""}
-        ${h.last_status === "success" ? `<span class="last-run-time">${count} file${count !== 1 ? "s" : ""}</span>` : ""}
-      </span>`;
+  const groups = {};
+  const ungrouped = [];
+  for (const h of hostsCache) {
+    const g = h.grp ? h.grp.trim() : "";
+    if (g) {
+      if (!groups[g]) groups[g] = [];
+      groups[g].push(h);
     } else {
-      lastBadge = `<span class="last-run-info"><span class="never-run">Never cleared</span></span>`;
+      ungrouped.push(h);
     }
+  }
 
-    return `
-    <div class="host-card${isRunning ? " host-card-running" : ""}">
-      <div class="host-card-top">
-        <div class="host-card-title">
-          <h3>${esc(h.name)}</h3>
-          ${lastBadge}
-        </div>
-        <div class="host-card-actions">
-          <button class="btn btn-primary btn-sm" onclick="triggerClear(event, '${h.id}')"${isRunning ? " disabled" : ""}>
-            ${isRunning ? '<span class="spinner-inline"></span> Running…' : "Clear Now"}
-          </button>
-          <button class="btn btn-sm btn-test" onclick="testConnection('${h.id}', this)">Test SSH</button>
-          <button class="btn btn-sm" onclick="editHost('${h.id}')">Edit</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteHost('${h.id}')">Delete</button>
-        </div>
-      </div>
-      <div class="host-meta">
-        <span>${esc(h.username)}@${esc(h.hostname)}:${h.port}</span>
-        <span>${scheduleLabel(h.schedule)}</span>
-        <span>Keep: ${h.keep_last ? "last " + h.keep_last : "all"}</span>
-      </div>
-      <div class="tag-paths">
-        ${paths.map(p => `<span class="tag">${esc(p)}</span>`).join("")}
-      </div>
+  const sortedGroupNames = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+  let html = "";
+
+  for (const gname of sortedGroupNames) {
+    html += `<div class="host-group">
+      <div class="host-group-header"><span class="host-group-label">${esc(gname)}</span></div>
+      <div class="card-grid">${groups[gname].map(hostCardHtml).join("")}</div>
     </div>`;
-  }).join("");
+  }
+
+  if (ungrouped.length) {
+    const wrap = sortedGroupNames.length ? `<div class="host-group">
+      <div class="host-group-header"><span class="host-group-label host-group-ungrouped">Ungrouped</span></div>
+      <div class="card-grid">${ungrouped.map(hostCardHtml).join("")}</div>
+    </div>` : `<div class="card-grid">${ungrouped.map(hostCardHtml).join("")}</div>`;
+    html += wrap;
+  }
+
+  el.innerHTML = html;
 }
 
 // ── Test SSH ─────────────────────────────────────────────────────────
@@ -248,6 +274,7 @@ function showHostForm(host) {
   document.getElementById("host-port").value     = host ? host.port : 22;
   document.getElementById("host-username").value = host ? host.username : "";
   document.getElementById("host-ssh-key").value  = host ? (host.ssh_key || "/root/.ssh/id_ed25519") : "/root/.ssh/id_ed25519";
+  document.getElementById("host-group").value    = host ? (host.grp || "") : "";
   document.getElementById("host-paths").value    = host ? JSON.parse(host.remote_paths).join("\n") : "";
   document.getElementById("host-keep-last").value = host ? (host.keep_last || 0) : 0;
 
@@ -290,6 +317,7 @@ async function saveHost(e) {
     port:         parseInt(document.getElementById("host-port").value),
     username:     document.getElementById("host-username").value,
     ssh_key:      document.getElementById("host-ssh-key").value.trim() || "/root/.ssh/id_ed25519",
+    grp:          document.getElementById("host-group").value.trim(),
     remote_paths: paths,
     schedule:     getScheduleValue(),
     keep_last:    parseInt(document.getElementById("host-keep-last").value) || 0,
