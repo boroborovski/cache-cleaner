@@ -265,6 +265,31 @@ async function testConnection(id, btn) {
   else toast("Connection failed: " + data.message, "error");
 }
 
+// ── Path rows ────────────────────────────────────────────────────────
+const PATH_PREFIX = "/opt/docker/";
+const PATH_SUFFIX = "/cache/";
+
+function addPathRow(value = "") {
+  const rowsEl = document.getElementById("path-rows");
+  const row = document.createElement("div");
+  row.className = "path-row";
+  row.innerHTML = `
+    <span class="path-fixed">${PATH_PREFIX}</span>
+    <input type="text" class="path-app-input" value="${esc(value)}" placeholder="www-appbuilder" pattern="[A-Za-z0-9_-]+" required>
+    <span class="path-fixed">${PATH_SUFFIX}</span>
+    <button type="button" class="btn-remove-path" onclick="this.closest('.path-row').remove()" title="Remove">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>`;
+  rowsEl.appendChild(row);
+}
+
+function getAppNames() {
+  return [...document.querySelectorAll(".path-app-input")]
+    .map(i => i.value.trim())
+    .filter(Boolean)
+    .map(name => `${PATH_PREFIX}${name}${PATH_SUFFIX}`);
+}
+
 // ── Host form ────────────────────────────────────────────────────────
 function showHostForm(host) {
   document.getElementById("host-form-title").textContent = host ? "Edit Host" : "Add Host";
@@ -275,7 +300,15 @@ function showHostForm(host) {
   document.getElementById("host-username").value = host ? host.username : "";
   document.getElementById("host-ssh-key").value  = host ? (host.ssh_key || "/root/.ssh/id_ed25519") : "/root/.ssh/id_ed25519";
   document.getElementById("host-group").value    = host ? (host.grp || "") : "";
-  document.getElementById("host-paths").value    = host ? JSON.parse(host.remote_paths).join("\n") : "";
+  const appNames = host
+    ? JSON.parse(host.remote_paths).map(p => {
+        const m = p.match(/^\/opt\/docker\/([^/]+)\/cache\/?$/);
+        return m ? m[1] : p;
+      })
+    : [""];
+  const rowsEl = document.getElementById("path-rows");
+  rowsEl.innerHTML = "";
+  appNames.forEach(name => addPathRow(name));
   document.getElementById("host-keep-last").value = host ? (host.keep_last || 0) : 0;
 
   const preset      = document.getElementById("host-schedule-preset");
@@ -309,8 +342,7 @@ function editHost(id) {
 async function saveHost(e) {
   e.preventDefault();
   const id    = document.getElementById("host-id").value;
-  const paths = document.getElementById("host-paths").value
-    .split("\n").map(p => p.trim()).filter(Boolean);
+  const paths = getAppNames();
   const data  = {
     name:         document.getElementById("host-name").value,
     hostname:     document.getElementById("host-hostname").value,

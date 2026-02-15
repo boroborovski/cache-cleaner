@@ -86,8 +86,12 @@
         <input type="text" id="host-ssh-key" placeholder="/root/.ssh/id_ed25519">
       </div>
       <div class="field">
-        <label for="host-paths">Cache Paths <span class="hint">one per line — will run find+rm on each</span></label>
-        <textarea id="host-paths" rows="3" required placeholder="/var/cache/nginx/&#10;/tmp/app-cache/"></textarea>
+        <label>App Names <span class="hint">path will be /opt/docker/<em>name</em>/cache/</span></label>
+        <div id="path-rows"></div>
+        <button type="button" class="btn btn-sm" style="margin-top:.4rem" onclick="addPathRow()">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add app
+        </button>
       </div>
       <div class="field">
         <label for="host-schedule-preset">Auto-clear Schedule</label>

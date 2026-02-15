@@ -1,10 +1,13 @@
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import uuid
 from datetime import datetime
 from pathlib import Path
+
+PATH_PATTERN = re.compile(r'^/opt/docker/[A-Za-z0-9_-]+/cache/$')
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, g, jsonify, render_template, request
@@ -209,9 +212,17 @@ def list_hosts():
     return jsonify([dict(r) for r in rows])
 
 
+def _validate_paths(paths):
+    invalid = [p for p in paths if not PATH_PATTERN.match(p)]
+    return invalid
+
+
 @app.route("/api/hosts", methods=["POST"])
 def create_host():
     data    = request.json
+    invalid = _validate_paths(data.get("remote_paths", []))
+    if invalid:
+        return jsonify({"error": f"Invalid path(s): {', '.join(invalid)}. Must match /opt/docker/<name>/cache/"}), 400
     host_id = str(uuid.uuid4())
     db      = get_db()
     db.execute(
@@ -233,6 +244,9 @@ def create_host():
 @app.route("/api/hosts/<host_id>", methods=["PUT"])
 def update_host(host_id):
     data = request.json
+    invalid = _validate_paths(data.get("remote_paths", []))
+    if invalid:
+        return jsonify({"error": f"Invalid path(s): {', '.join(invalid)}. Must match /opt/docker/<name>/cache/"}), 400
     db   = get_db()
     db.execute(
         "UPDATE hosts SET name=?, hostname=?, port=?, username=?, ssh_key=?, grp=?, remote_paths=?, schedule=?, keep_last=? WHERE id=?",

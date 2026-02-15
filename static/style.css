@@ -171,6 +171,39 @@ main {
   gap: .35rem;
 }
 
+/* ── Path rows (structured /opt/docker/NAME/cache/) ─ */
+.path-row {
+  display: flex;
+  align-items: center;
+  gap: .3rem;
+  margin-bottom: .35rem;
+}
+.path-fixed {
+  font-family: monospace;
+  font-size: .82rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  user-select: none;
+}
+.path-app-input {
+  flex: 1;
+  min-width: 0;
+  font-family: monospace;
+  font-size: .85rem;
+}
+.btn-remove-path {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: .2rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  transition: color .15s;
+}
+.btn-remove-path:hover { color: var(--red); }
+
 .empty-state {
   text-align: center;
   padding: 4rem 2rem;
