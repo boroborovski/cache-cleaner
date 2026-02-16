@@ -53,7 +53,27 @@ body {
 }
 .logo svg { color: var(--accent); }
 
-.sidebar nav { display: flex; flex-direction: column; gap: .25rem; }
+.sidebar nav { display: flex; flex-direction: column; gap: .25rem; flex: 1; }
+
+.sidebar-footer { margin-top: auto; }
+
+.btn-admin-lock {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  width: 100%;
+  padding: .45rem .6rem;
+  border-radius: var(--radius-sm);
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: .78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-admin-lock:hover { border-color: var(--border-hover); color: var(--text-dim); }
+.btn-admin-lock.admin-active { border-color: var(--accent); color: var(--accent); }
 
 .nav-btn {
   display: flex;

@@ -190,8 +190,9 @@ function hostCardHtml(h) {
           ${isRunning ? '<span class="spinner-inline"></span> Running…' : "Clear Now"}
         </button>
         <button class="btn btn-sm btn-test" onclick="testConnection('${h.id}', this)">Test SSH</button>
+        ${adminPin || !adminRequired ? `
         <button class="btn btn-sm" onclick="editHost('${h.id}')">Edit</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteHost('${h.id}')">Delete</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteHost('${h.id}')">Delete</button>` : ""}
       </div>
     </div>
     <div class="host-meta">
@@ -265,37 +266,70 @@ async function testConnection(id, btn) {
   else toast("Connection failed: " + data.message, "error");
 }
 
-// ── Path rows ────────────────────────────────────────────────────────
-const PATH_PREFIX = "/opt/docker/";
-const PATH_MID    = "/cache/";
+// ── Admin PIN ─────────────────────────────────────────────────────────
+let adminPin       = sessionStorage.getItem("adminPin") || "";
+let adminRequired  = false;   // set after /api/admin-required resolves
 
-function addPathRow(value = "") {
-  // value is either a full path string or empty
-  const m = value.match(/^\/opt\/docker\/([^/]*)\/cache\/([^/]*)$/);
-  const v1 = m ? m[1] : (value || "");
-  const v2 = m ? m[2] : (value || "");
-  const rowsEl = document.getElementById("path-rows");
-  const row = document.createElement("div");
-  row.className = "path-row";
-  row.innerHTML = `
-    <span class="path-fixed">${PATH_PREFIX}</span>
-    <input type="text" class="path-app-input path-app-1" value="${esc(v1)}" placeholder="www-appbuilder" pattern="[A-Za-z0-9_-]+" required>
-    <span class="path-fixed">${PATH_MID}</span>
-    <input type="text" class="path-app-input path-app-2" value="${esc(v2)}" placeholder="www-appbuilder" pattern="[A-Za-z0-9_-]+" required>
-    <button type="button" class="btn-remove-path" onclick="this.closest('.path-row').remove()" title="Remove">
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </button>`;
-  rowsEl.appendChild(row);
+async function initAdmin() {
+  const data = await api("/api/admin-required");
+  if (!data) return;
+  adminRequired = data.required;
+  if (!adminRequired) {
+    // No PIN configured — always show admin controls
+    setAdminMode(true, false);
+  } else if (adminPin) {
+    // PIN already in session — verify it's still valid by showing controls
+    setAdminMode(true, true);
+  } else {
+    setAdminMode(false, true);
+  }
 }
 
-function getAppNames() {
-  return [...document.querySelectorAll(".path-row")]
-    .map(row => {
-      const n1 = row.querySelector(".path-app-1").value.trim();
-      const n2 = row.querySelector(".path-app-2").value.trim();
-      return n1 && n2 ? `${PATH_PREFIX}${n1}${PATH_MID}${n2}` : null;
-    })
-    .filter(Boolean);
+function setAdminMode(isAdmin, showLock) {
+  document.querySelectorAll(".admin-only").forEach(el => {
+    el.style.display = isAdmin ? "" : "none";
+  });
+  const btn   = document.getElementById("admin-lock-btn");
+  const label = document.getElementById("lock-label");
+  const icon  = document.getElementById("lock-icon");
+  if (!showLock) {
+    btn.style.display = "none";
+    return;
+  }
+  btn.style.display = "";
+  if (isAdmin) {
+    label.textContent = "Lock";
+    btn.classList.add("admin-active");
+    icon.innerHTML = '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 3.93-4.87"/>';
+  } else {
+    label.textContent = "Admin";
+    btn.classList.remove("admin-active");
+    icon.innerHTML = '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>';
+  }
+  renderHosts(); // re-render to show/hide card buttons
+}
+
+function toggleAdmin() {
+  if (!adminRequired) return;
+  if (adminPin) {
+    // Lock
+    adminPin = "";
+    sessionStorage.removeItem("adminPin");
+    setAdminMode(false, true);
+  } else {
+    // Unlock — prompt for PIN
+    const pin = prompt("Enter admin PIN:");
+    if (pin === null) return;
+    adminPin = pin;
+    sessionStorage.setItem("adminPin", pin);
+    setAdminMode(true, true);
+  }
+}
+
+function adminHeaders() {
+  const h = { "Content-Type": "application/json" };
+  if (adminPin) h["X-Admin-Pin"] = adminPin;
+  return h;
 }
 
 // ── Host form ────────────────────────────────────────────────────────
@@ -308,10 +342,7 @@ function showHostForm(host) {
   document.getElementById("host-username").value = host ? host.username : "";
   document.getElementById("host-ssh-key").value  = host ? (host.ssh_key || "/root/.ssh/id_ed25519") : "/root/.ssh/id_ed25519";
   document.getElementById("host-group").value    = host ? (host.grp || "") : "";
-  const savedPaths = host ? JSON.parse(host.remote_paths) : [""];
-  const rowsEl = document.getElementById("path-rows");
-  rowsEl.innerHTML = "";
-  savedPaths.forEach(p => addPathRow(p));
+  document.getElementById("host-paths").value    = host ? JSON.parse(host.remote_paths).join("\n") : "";
   document.getElementById("host-keep-last").value = host ? (host.keep_last || 0) : 0;
 
   const preset      = document.getElementById("host-schedule-preset");
@@ -345,7 +376,8 @@ function editHost(id) {
 async function saveHost(e) {
   e.preventDefault();
   const id    = document.getElementById("host-id").value;
-  const paths = getAppNames();
+  const paths = document.getElementById("host-paths").value
+    .split("\n").map(p => p.trim()).filter(Boolean);
   const data  = {
     name:         document.getElementById("host-name").value,
     hostname:     document.getElementById("host-hostname").value,
@@ -358,8 +390,8 @@ async function saveHost(e) {
     keep_last:    parseInt(document.getElementById("host-keep-last").value) || 0,
   };
   const result = id
-    ? await api(`/api/hosts/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
-    : await api("/api/hosts",       { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+    ? await api(`/api/hosts/${id}`, { method: "PUT",  headers: adminHeaders(), body: JSON.stringify(data) })
+    : await api("/api/hosts",       { method: "POST", headers: adminHeaders(), body: JSON.stringify(data) });
   if (!result) return;
   document.getElementById("host-dialog").close();
   toast(id ? "Host updated" : "Host added", "success");
@@ -368,7 +400,7 @@ async function saveHost(e) {
 
 async function deleteHost(id) {
   if (!confirm("Delete this host and its clear history?")) return;
-  const result = await api(`/api/hosts/${id}`, { method: "DELETE" });
+  const result = await api(`/api/hosts/${id}`, { method: "DELETE", headers: adminHeaders() });
   if (!result) return;
   toast("Host deleted", "info");
   loadHosts();
@@ -438,4 +470,4 @@ async function loadHistory() {
 }
 
 // ── Init ─────────────────────────────────────────────────────────────
-loadHosts();
+initAdmin().then(() => loadHosts());

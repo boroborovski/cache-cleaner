@@ -1,21 +1,20 @@
 import json
 import os
-import re
 import sqlite3
 import subprocess
 import uuid
 from datetime import datetime
 from pathlib import Path
-
-PATH_PATTERN = re.compile(r'^/opt/docker/[A-Za-z0-9_-]+/cache/[A-Za-z0-9_-]+$')
+from functools import wraps
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, g, jsonify, render_template, request
 
 app = Flask(__name__)
 
-DATA_DIR = os.environ.get("DATA_DIR", "/data")
-DB_PATH  = os.path.join(DATA_DIR, "cache_cleaner.db")
+DATA_DIR  = os.environ.get("DATA_DIR", "/data")
+DB_PATH   = os.path.join(DATA_DIR, "cache_cleaner.db")
+ADMIN_PIN = os.environ.get("ADMIN_PIN", "")   # empty = no PIN required
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -73,6 +72,19 @@ def init_db():
     db.close()
 
 
+# ── Admin PIN guard ───────────────────────────────────────────────────
+
+def require_admin(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if ADMIN_PIN:
+            provided = request.headers.get("X-Admin-Pin", "")
+            if provided != ADMIN_PIN:
+                return jsonify({"error": "Admin PIN required"}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+
 # ── SSH clear engine ──────────────────────────────────────────────────
 
 def run_clear(host_id):
@@ -111,7 +123,6 @@ def run_clear(host_id):
         if not remote_path:
             continue
 
-        # find + delete, print each file; count lines in output
         cmd_str = f"sudo find {remote_path} -type f -exec rm -v {{}} \\;"
         cmd = ssh_base + [cmd_str]
 
@@ -121,7 +132,6 @@ def run_clear(host_id):
             total_deleted += deleted
             if result.returncode != 0:
                 stderr = result.stderr.strip()
-                # ignore "No such file or directory" as non-fatal
                 fatal = [l for l in stderr.splitlines()
                          if "No such file" not in l and l.strip()]
                 if fatal:
@@ -144,7 +154,6 @@ def run_clear(host_id):
         )
     db.commit()
 
-    # Enforce retention (history records only)
     keep_last = host["keep_last"]
     if keep_last and keep_last > 0:
         db.execute(
@@ -191,6 +200,13 @@ def _remove_schedule(host_id):
         scheduler.remove_job(job_id)
 
 
+# ── API: Admin status ─────────────────────────────────────────────────
+
+@app.route("/api/admin-required", methods=["GET"])
+def admin_required():
+    return jsonify({"required": bool(ADMIN_PIN)})
+
+
 # ── API: Hosts ────────────────────────────────────────────────────────
 
 @app.route("/api/hosts", methods=["GET"])
@@ -212,17 +228,10 @@ def list_hosts():
     return jsonify([dict(r) for r in rows])
 
 
-def _validate_paths(paths):
-    invalid = [p for p in paths if not PATH_PATTERN.match(p)]
-    return invalid
-
-
 @app.route("/api/hosts", methods=["POST"])
+@require_admin
 def create_host():
     data    = request.json
-    invalid = _validate_paths(data.get("remote_paths", []))
-    if invalid:
-        return jsonify({"error": f"Invalid path(s): {', '.join(invalid)}. Must match /opt/docker/<name>/cache/"}), 400
     host_id = str(uuid.uuid4())
     db      = get_db()
     db.execute(
@@ -242,11 +251,9 @@ def create_host():
 
 
 @app.route("/api/hosts/<host_id>", methods=["PUT"])
+@require_admin
 def update_host(host_id):
     data = request.json
-    invalid = _validate_paths(data.get("remote_paths", []))
-    if invalid:
-        return jsonify({"error": f"Invalid path(s): {', '.join(invalid)}. Must match /opt/docker/<name>/cache/"}), 400
     db   = get_db()
     db.execute(
         "UPDATE hosts SET name=?, hostname=?, port=?, username=?, ssh_key=?, grp=?, remote_paths=?, schedule=?, keep_last=? WHERE id=?",
@@ -264,6 +271,7 @@ def update_host(host_id):
 
 
 @app.route("/api/hosts/<host_id>", methods=["DELETE"])
+@require_admin
 def delete_host(host_id):
     db = get_db()
     db.execute("DELETE FROM hosts WHERE id = ?", (host_id,))

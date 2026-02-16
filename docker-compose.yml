@@ -6,6 +6,8 @@ services:
     volumes:
       - app-db:/data
       - ./ssh:/root/.ssh:ro
+    environment:
+      - ADMIN_PIN=changeme   # set to a strong PIN; leave empty to disable
     restart: unless-stopped
 
 volumes:
