@@ -270,17 +270,18 @@ const PATH_PREFIX = "/opt/docker/";
 const PATH_MID    = "/cache/";
 
 function addPathRow(value = "") {
+  // value is either a full path string or empty
+  const m = value.match(/^\/opt\/docker\/([^/]*)\/cache\/([^/]*)$/);
+  const v1 = m ? m[1] : (value || "");
+  const v2 = m ? m[2] : (value || "");
   const rowsEl = document.getElementById("path-rows");
   const row = document.createElement("div");
   row.className = "path-row";
-  const safeVal = esc(value);
   row.innerHTML = `
     <span class="path-fixed">${PATH_PREFIX}</span>
-    <input type="text" class="path-app-input" value="${safeVal}" placeholder="www-appbuilder"
-           pattern="[A-Za-z0-9_-]+" required
-           oninput="this.closest('.path-row').querySelector('.path-mirror').textContent = this.value || 'name'">
+    <input type="text" class="path-app-input path-app-1" value="${esc(v1)}" placeholder="www-appbuilder" pattern="[A-Za-z0-9_-]+" required>
     <span class="path-fixed">${PATH_MID}</span>
-    <span class="path-fixed path-mirror">${safeVal || 'name'}</span>
+    <input type="text" class="path-app-input path-app-2" value="${esc(v2)}" placeholder="www-appbuilder" pattern="[A-Za-z0-9_-]+" required>
     <button type="button" class="btn-remove-path" onclick="this.closest('.path-row').remove()" title="Remove">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>`;
@@ -288,10 +289,13 @@ function addPathRow(value = "") {
 }
 
 function getAppNames() {
-  return [...document.querySelectorAll(".path-app-input")]
-    .map(i => i.value.trim())
-    .filter(Boolean)
-    .map(name => `${PATH_PREFIX}${name}${PATH_MID}${name}`);
+  return [...document.querySelectorAll(".path-row")]
+    .map(row => {
+      const n1 = row.querySelector(".path-app-1").value.trim();
+      const n2 = row.querySelector(".path-app-2").value.trim();
+      return n1 && n2 ? `${PATH_PREFIX}${n1}${PATH_MID}${n2}` : null;
+    })
+    .filter(Boolean);
 }
 
 // ── Host form ────────────────────────────────────────────────────────
@@ -304,15 +308,10 @@ function showHostForm(host) {
   document.getElementById("host-username").value = host ? host.username : "";
   document.getElementById("host-ssh-key").value  = host ? (host.ssh_key || "/root/.ssh/id_ed25519") : "/root/.ssh/id_ed25519";
   document.getElementById("host-group").value    = host ? (host.grp || "") : "";
-  const appNames = host
-    ? JSON.parse(host.remote_paths).map(p => {
-        const m = p.match(/^\/opt\/docker\/([^/]+)\/cache\/\1$/);
-        return m ? m[1] : p;
-      })
-    : [""];
+  const savedPaths = host ? JSON.parse(host.remote_paths) : [""];
   const rowsEl = document.getElementById("path-rows");
   rowsEl.innerHTML = "";
-  appNames.forEach(name => addPathRow(name));
+  savedPaths.forEach(p => addPathRow(p));
   document.getElementById("host-keep-last").value = host ? (host.keep_last || 0) : 0;
 
   const preset      = document.getElementById("host-schedule-preset");

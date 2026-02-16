@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-PATH_PATTERN = re.compile(r'^/opt/docker/([A-Za-z0-9_-]+)/cache/\1$')
+PATH_PATTERN = re.compile(r'^/opt/docker/[A-Za-z0-9_-]+/cache/[A-Za-z0-9_-]+$')
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, g, jsonify, render_template, request
