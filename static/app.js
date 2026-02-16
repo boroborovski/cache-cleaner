@@ -267,16 +267,20 @@ async function testConnection(id, btn) {
 
 // ── Path rows ────────────────────────────────────────────────────────
 const PATH_PREFIX = "/opt/docker/";
-const PATH_SUFFIX = "/cache/";
+const PATH_MID    = "/cache/";
 
 function addPathRow(value = "") {
   const rowsEl = document.getElementById("path-rows");
   const row = document.createElement("div");
   row.className = "path-row";
+  const safeVal = esc(value);
   row.innerHTML = `
     <span class="path-fixed">${PATH_PREFIX}</span>
-    <input type="text" class="path-app-input" value="${esc(value)}" placeholder="www-appbuilder" pattern="[A-Za-z0-9_-]+" required>
-    <span class="path-fixed">${PATH_SUFFIX}</span>
+    <input type="text" class="path-app-input" value="${safeVal}" placeholder="www-appbuilder"
+           pattern="[A-Za-z0-9_-]+" required
+           oninput="this.closest('.path-row').querySelector('.path-mirror').textContent = this.value || 'name'">
+    <span class="path-fixed">${PATH_MID}</span>
+    <span class="path-fixed path-mirror">${safeVal || 'name'}</span>
     <button type="button" class="btn-remove-path" onclick="this.closest('.path-row').remove()" title="Remove">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>`;
@@ -287,7 +291,7 @@ function getAppNames() {
   return [...document.querySelectorAll(".path-app-input")]
     .map(i => i.value.trim())
     .filter(Boolean)
-    .map(name => `${PATH_PREFIX}${name}${PATH_SUFFIX}`);
+    .map(name => `${PATH_PREFIX}${name}${PATH_MID}${name}`);
 }
 
 // ── Host form ────────────────────────────────────────────────────────
@@ -302,7 +306,7 @@ function showHostForm(host) {
   document.getElementById("host-group").value    = host ? (host.grp || "") : "";
   const appNames = host
     ? JSON.parse(host.remote_paths).map(p => {
-        const m = p.match(/^\/opt\/docker\/([^/]+)\/cache\/?$/);
+        const m = p.match(/^\/opt\/docker\/([^/]+)\/cache\/\1$/);
         return m ? m[1] : p;
       })
     : [""];
